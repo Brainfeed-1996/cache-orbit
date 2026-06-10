@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+vendor/
+target/
+
+# Build
+dist/
+build/
+out/
+
+# Env
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+/target
+**/*.rs.bk
+
+# Logs
+*.log

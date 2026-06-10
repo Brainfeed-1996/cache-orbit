@@ -1,0 +1,28 @@
+[package]
+name = "cache-orbit"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { version = "0.7.5", features = ["json", "macros"] }
+tokio = { version = "1.37", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+moka = { version = "0.12", features = ["future"] }
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5", features = ["trace", "cors"] }
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+prometheus = { version = "0.13", features = ["process"] }
+metrics = "0.23"
+metrics-exporter-prometheus = { version = "0.13", default-features = false }
+dashmap = "5.5"
+parking_lot = "0.12"
+blake3 = "1.5"
+uuid = { version = "1.8", features = ["v4"] }
+glob-match = "0.2"
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+tokio-test = "0.4"

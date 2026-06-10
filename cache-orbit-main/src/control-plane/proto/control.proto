@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package cacheorbit.control.v1;
+
+service CacheControl {
+    rpc GetTopology (GetTopologyRequest) returns (TopologyResponse);
+    rpc UpdateTopology (UpdateTopologyRequest) returns (TopologyResponse);
+    rpc InvalidateKey (InvalidateKeyRequest) returns (InvalidateResponse);
+    rpc InvalidatePattern (InvalidatePatternRequest) returns (InvalidateResponse);
+    rpc GetMetrics (GetMetricsRequest) returns (MetricsResponse);
+    rpc GetHotKeys (GetHotKeysRequest) returns (HotKeysResponse);
+    rpc ReloadConfig (ReloadConfigRequest) returns (ReloadConfigResponse);
+    rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message GetTopologyRequest {}
+
+message TopologyResponse {
+    string version = 1;
+    repeated Node nodes = 2;
+    repeated Partition partitions = 3;
+    StalenessStatus staleness = 4;
+}
+
+message Node {
+    string node_id = 1;
+    string listen_addr = 2;
+    string datacenter = 3;
+    string rack = 4;
+    repeated string partition_ids = 5;
+    repeated Replica replicas = 6;
+    NodeStatus status = 7;
+    int64 last_heartbeat_ms = 8;
+}
+
+message Replica {
+    string node_id = 1;
+    string addr = 2;
+    int32 weight = 3;
+    map<string, string> tags = 4;
+}
+
+message Partition {
+    uint64 id = 1;
+    string primary_node = 2;
+    repeated string replica_nodes = 3;
+    ConsistencyLevel consistency = 4;
+}
+
+message StalenessStatus {
+    double avg_lag_ms = 1;
+    uint64 stale_keys = 2;
+    uint64 total_keys = 3;
+}
+
+message NodeStatus {
+    enum State {
+        HEALTHY = 0;
+        DEGRADED = 1;
+        UNHEALTHY = 2;
+    }
+    State state = 1;
+    string message = 2;
+}
+
+message GetTopologyRequest {}
+
+message UpdateTopologyRequest {
+    string expected_version = 1;
+    repeated Node nodes = 2;
+}
+
+message InvalidateKeyRequest {
+    string key = 1;
+    string node_id = 2;
+    bool force_flush = 3;
+}
+
+message InvalidatePatternRequest {
+    string pattern = 1;
+    repeated string node_ids = 2;
+    bool broadcast = 3;
+}
+
+message InvalidateResponse {
+    uint64 keys_affected = 1;
+    repeated string errors = 2;
+}
+
+message GetMetricsRequest { string node_id = 1; }
+
+message MetricsResponse {
+    double hit_ratio = 1;
+    uint64 p50_latency_ms = 2;
+    uint64 p99_latency_ms = 3;
+    uint64 evictions_per_sec = 4;
+}
+
+message GetHotKeysRequest {
+    uint64 window_secs = 1;
+    double percentile = 2;
+}
+
+message HotKeysResponse {
+    repeated HotKey hot_keys = 1;
+}
+
+message HotKey {
+    string key = 1;
+    uint64 qps = 2;
+    uint64 latency_p99_ms = 3;
+}
+
+message ReloadConfigRequest { string config_path = 1; }
+
+message ReloadConfigResponse { bool reloaded = 1; }
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+    bool healthy = 1;
+    string version = 2;
+    string uptime_ms = 3;
+}
+
+enum ConsistencyLevel {
+    STRONG = 0;
+    WEAK = 1;
+    BOUNDED_STALENESS = 2;
+}

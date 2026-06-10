@@ -1,0 +1,153 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cache_orbit
+      POSTGRES_USER: cache_orbit
+      POSTGRES_PASSWORD: cache_orbit
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cache_orbit -d cache_orbit"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cache-orbit
+    restart: unless-stopped
+
+  nats:
+    image: nats:2-alpine
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - ./docker/nats:/data
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4222"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+    networks:
+      - cache-orbit
+    restart: unless-stopped
+
+  control-plane:
+    build:
+      context: .
+      dockerfile: src/control-plane/Dockerfile
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    environment:
+      DATABASE_URL: postgres://cache_orbit:cache_orbit@postgres:5432/cache_orbit?sslmode=disable
+      NATS_URL: nats://cache_orbit:cache_orbit@nats:4222
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    volumes:
+      - ./src/control-plane:/app
+      - control_plane_logs:/app/logs
+    networks:
+      - cache-orbit
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+
+  cache-engine:
+    build:
+      context: .
+      dockerfile: src/cache-engine/Dockerfile
+    ports:
+      - "6379:6379"
+      - "9090:9090"
+    environment:
+      NODE_ID: cache-engine-1
+      LISTEN_ADDR: 0.0.0.0:6379
+      DATACENTER: local
+      RACK: local
+      METRICS_ADDR: 0.0.0.0:9090
+      PRIMARY_MAX_CAPACITY: 1000000
+      L1_CAPACITY_MB: 256
+      TTL_SECS: 300
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    volumes:
+      - ./src/cache-engine:/app/src
+    networks:
+      - cache-orbit
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/metrics"]
+
+  operator-ui:
+    build:
+      context: .
+      dockerfile: src/operator-ui/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      NEXT_PUBLIC_WS_URL: ws://localhost:8080
+    depends_on:
+      - cache-engine
+      - control-plane
+    networks:
+      - cache-orbit
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+      - ./docker/prometheus/alerts:/etc/prometheus/alerts:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    networks:
+      - cache-orbit
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: cache_orbit
+      GF_SERVER_ROOT_URL: http://localhost:3001
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - cache-orbit
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  control_plane_logs:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  cache-orbit:
+    name: cache-orbit
+    driver: bridge
